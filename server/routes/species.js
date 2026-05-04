@@ -6,9 +6,9 @@ const { speciesData } = require('../seed/seedData');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
-// Escape special regex characters to prevent ReDoS
-function escapeRegex(str) {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Allowlist sanitizer: only permit letters, digits, spaces, and hyphens
+function sanitizeSearch(str) {
+  return String(str).slice(0, 100).replace(/[^a-zA-Z0-9\s\-]/g, '');
 }
 
 // GET /api/species
@@ -16,18 +16,22 @@ router.get('/', async (req, res) => {
   try {
     const { status, region, search } = req.query;
     if (isDBConnected()) {
+      // Apply enum/exact-match filters at DB level; apply search in application code
       let query = {};
       if (status) query.conservationStatus = status;
       if (region) query.region = region;
+      let species = await Species.find(query).lean();
+      // Post-query text filter to avoid user input in DB regex
       if (search) {
-        const safeSearch = escapeRegex(String(search).slice(0, 100));
-        query.$or = [
-          { name: { $regex: safeSearch, $options: 'i' } },
-          { commonName: { $regex: safeSearch, $options: 'i' } },
-          { habitat: { $regex: safeSearch, $options: 'i' } }
-        ];
+        const s = sanitizeSearch(search).toLowerCase();
+        if (s) {
+          species = species.filter(sp =>
+            sp.name.toLowerCase().includes(s) ||
+            (sp.commonName && sp.commonName.toLowerCase().includes(s)) ||
+            (sp.habitat && sp.habitat.toLowerCase().includes(s))
+          );
+        }
       }
-      const species = await Species.find(query);
       return res.json(species);
     }
     // In-memory fallback
@@ -35,12 +39,14 @@ router.get('/', async (req, res) => {
     if (status) data = data.filter(s => s.conservationStatus === status);
     if (region) data = data.filter(s => s.region === region);
     if (search) {
-      const s = search.toLowerCase();
-      data = data.filter(sp =>
-        sp.name.toLowerCase().includes(s) ||
-        (sp.commonName && sp.commonName.toLowerCase().includes(s)) ||
-        (sp.habitat && sp.habitat.toLowerCase().includes(s))
-      );
+      const s = sanitizeSearch(search).toLowerCase();
+      if (s) {
+        data = data.filter(sp =>
+          sp.name.toLowerCase().includes(s) ||
+          (sp.commonName && sp.commonName.toLowerCase().includes(s)) ||
+          (sp.habitat && sp.habitat.toLowerCase().includes(s))
+        );
+      }
     }
     res.json(data);
   } catch (err) {
