@@ -18,9 +18,14 @@ router.post('/register', async (req, res) => {
     const { username, email, password } = req.body;
     if (!username || !email || !password)
       return res.status(400).json({ message: 'All fields are required' });
+    // Ensure inputs are strings to prevent NoSQL injection via object payloads
+    if (typeof username !== 'string' || typeof email !== 'string' || typeof password !== 'string')
+      return res.status(400).json({ message: 'Invalid input' });
 
     if (isDBConnected()) {
-      const existing = await User.findOne({ $or: [{ email }, { username }] });
+      const existing = await User.findOne({
+        $or: [{ email: { $eq: email } }, { username: { $eq: username } }]
+      });
       if (existing) return res.status(400).json({ message: 'User already exists' });
       const user = new User({ username, email, password });
       await user.save();
@@ -47,9 +52,11 @@ router.post('/login', async (req, res) => {
     const { email, password } = req.body;
     if (!email || !password)
       return res.status(400).json({ message: 'Email and password are required' });
+    if (typeof email !== 'string' || typeof password !== 'string')
+      return res.status(400).json({ message: 'Invalid input' });
 
     if (isDBConnected()) {
-      const user = await User.findOne({ email });
+      const user = await User.findOne({ email: { $eq: email } });
       if (!user) return res.status(401).json({ message: 'Invalid credentials' });
       const match = await user.comparePassword(password);
       if (!match) return res.status(401).json({ message: 'Invalid credentials' });

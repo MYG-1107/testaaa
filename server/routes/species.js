@@ -6,6 +6,11 @@ const { speciesData } = require('../seed/seedData');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
+// Escape special regex characters to prevent ReDoS
+function escapeRegex(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 // GET /api/species
 router.get('/', async (req, res) => {
   try {
@@ -14,11 +19,14 @@ router.get('/', async (req, res) => {
       let query = {};
       if (status) query.conservationStatus = status;
       if (region) query.region = region;
-      if (search) query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { commonName: { $regex: search, $options: 'i' } },
-        { habitat: { $regex: search, $options: 'i' } }
-      ];
+      if (search) {
+        const safeSearch = escapeRegex(String(search).slice(0, 100));
+        query.$or = [
+          { name: { $regex: safeSearch, $options: 'i' } },
+          { commonName: { $regex: safeSearch, $options: 'i' } },
+          { habitat: { $regex: safeSearch, $options: 'i' } }
+        ];
+      }
       const species = await Species.find(query);
       return res.json(species);
     }
