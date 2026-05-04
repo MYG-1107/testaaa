@@ -6,6 +6,9 @@ const { speciesData } = require('../seed/seedData');
 
 const isDBConnected = () => mongoose.connection.readyState === 1;
 
+const VALID_STATUSES = new Set(['Critically Endangered', 'Endangered', 'Vulnerable', 'Near Threatened', 'Least Concern', 'Extinct']);
+const VALID_REGIONS = new Set(['Africa', 'Asia', 'North America', 'Central America', 'Ocean', 'Arctic', 'Europe/Asia']);
+
 // Allowlist sanitizer: only permit letters, digits, spaces, and hyphens
 function sanitizeSearch(str) {
   return String(str).slice(0, 100).replace(/[^a-zA-Z0-9\s\-]/g, '');
